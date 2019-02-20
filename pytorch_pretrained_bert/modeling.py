@@ -764,16 +764,29 @@ class NoEmbeddingBertModel(nn.Module):
     ```
     """
     def __init__(self, config):
-        super(BertModel, self).__init__(config)
+        super(NoEmbeddingBertModel, self).__init__()
+        self.config = config
         self.encoder = BertEncoder(config)
         self.pooler = BertPooler(config)
         self.apply(self.init_bert_weights)
 
+    def init_bert_weights(self, module):
+        """ Initialize the weights.
+        """
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, BertLayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+
     def forward(self, input_vectors, attention_mask=None, output_all_encoded_layers=True):
         if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
-        if token_type_ids is None:
-            token_type_ids = torch.zeros_like(input_ids)
+            attention_mask = torch.ones(input_vectors.shape[:2], dtype=torch.long)
+            attention_mask.to(input_vectors.get_device())
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
